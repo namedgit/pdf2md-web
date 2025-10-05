@@ -1,97 +1,68 @@
-var path = require('path');
-var webpack = require('webpack');
-var HtmlWebpackPlugin = require('html-webpack-plugin');
-var CopyWebpackPlugin = require('copy-webpack-plugin');
+const path = require('path');
+const fs = require('fs');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
-var SOURCE_DIR = path.resolve(__dirname, 'src');
-var JAVASCRIPT_DIR = SOURCE_DIR + '/javascript';
-var BUILD_DIR = path.resolve(__dirname, 'build');
-var NODEMODULES_DIR = path.resolve(__dirname, 'node_modules');
+// Try a few common entry locations used in this repo's history
+const entryCandidates = [
+  './javascript/index.jsx',
+  './javascript/index.js',
+  './src/index.jsx',
+  './src/index.js'
+];
+const entry = entryCandidates.find(p => fs.existsSync(path.resolve(__dirname, p))) || './src/index.js';
+
+console.log('[pdf2md-web] Using entry:', entry);
 
 module.exports = {
-    context: SOURCE_DIR,
-    resolve: {
-        modules: [
-            path.resolve(JAVASCRIPT_DIR),
-            path.resolve(NODEMODULES_DIR + '/@opendocsg/pdf2md/lib'),
-            path.resolve(NODEMODULES_DIR)
-        ]
-    },
-    entry: {
-        app: ['core-js', 'regenerator-runtime/runtime', './javascript/index.jsx']
-    },
-    output: {
-        path: BUILD_DIR,
-        filename: 'bundle.js'
-    },
-    module: {
-        rules: [
-            {
-                // Ask webpack to check: If this file ends with .js, then apply some transforms
-                test: /\.jsx?$/,
-                loader: 'babel-loader',
-                options: {
-                    configFile: path.resolve('babel.config.js')
-                },
-                include: [JAVASCRIPT_DIR, NODEMODULES_DIR + '/@opendocsg/pdf2md/lib'],
-            },
-            {
-                test: /\.css$/,
-                loader: "style-loader!css-loader"
-            },
-            {
-                test: /\.png$/,
-                loader: "url-loader?limit=100000"
-            },
-            {
-                test: /\.jpg$/,
-                loader: "file-loader"
-            },
-            {
-                test: /\.(woff|woff2)(\?v=\d+\.\d+\.\d+)?$/,
-                loader: 'url-loader?limit=10000&mimetype=application/font-woff'
-            },
-            {
-                test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/,
-                loader: 'url-loader?limit=10000&mimetype=application/octet-stream'
-            },
-            {
-                test: /\.eot(\?v=\d+\.\d+\.\d+)?$/,
-                loader: 'file-loader'
-            },
-            {
-                test: /\.svg(\?v=\d+\.\d+\.\d+)?$/,
-                loader: 'url-loader?limit=10000&mimetype=image/svg+xml'
-            }
-        ]
-    },
-    plugins: [
-        new HtmlWebpackPlugin({
-            template: 'index.html'
-        }),
-        new webpack.DefinePlugin({
-            'process.env': {
-                'version': JSON.stringify(process.env.npm_package_version),
-                NODE_ENV: JSON.stringify(process.env.NODE_ENV || 'development')
-            }
-        }),
-        new CopyWebpackPlugin([
-            {
-                from: NODEMODULES_DIR + '/pdfjs-dist/build/pdf.worker.js',
-                to: 'bundle.worker.js'
-            },
-        ]),
-        new CopyWebpackPlugin([
-            {
-                from: NODEMODULES_DIR + '/pdfjs-dist/cmaps',
-                to: 'cmaps'
-            },
-        ]),
-        new CopyWebpackPlugin([
-            {
-                from: 'favicons',
-                to: 'favicons'
-            },
-        ])
+  mode: 'development',
+  entry: [
+    'core-js',
+    'regenerator-runtime/runtime',
+    entry
+  ],
+  output: {
+    path: path.resolve(__dirname, 'build'),
+    filename: 'bundle.[contenthash].js',
+    clean: true,
+    publicPath: '/'
+  },
+  resolve: {
+    extensions: ['.js', '.jsx']
+  },
+  module: {
+    rules: [
+      {
+        test: /\.(js|jsx)$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader'
+        }
+      }
     ]
-}
+  },
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: fs.existsSync(path.resolve(__dirname, 'index.html'))
+        ? 'index.html'
+        : path.resolve(__dirname, 'index.html'),
+      // title fallback if template missing (we also ship one)
+      templateParameters: { title: 'pdf2md-web' }
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'public/worker.js', to: 'worker.js', noErrorOnMissing: true },
+        { from: 'public/cmaps', to: 'cmaps', noErrorOnMissing: true }
+      ]
+    })
+  ],
+  devtool: 'source-map',
+  devServer: {
+    static: { directory: path.join(__dirname, 'public') },
+    compress: true,
+    port: 8080,
+    hot: true,
+    open: true,
+    historyApiFallback: true
+  }
+};
